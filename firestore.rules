@@ -1,0 +1,51 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function me() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    function activeUser() {
+      return signedIn() && me().data.active == true;
+    }
+
+    function sameCompany(companyId) {
+      return activeUser() && me().data.companyId == companyId;
+    }
+
+    function roleIs(roles) {
+      return activeUser() && me().data.role in roles;
+    }
+
+    match /users/{uid} {
+      allow read: if signedIn() && (request.auth.uid == uid || roleIs(['admin','coordenador']));
+      allow create, update, delete: if roleIs(['admin']);
+    }
+
+    match /reports/{reportId} {
+      allow read: if sameCompany(resource.data.companyId);
+      allow create: if sameCompany(request.resource.data.companyId) && roleIs(['admin','coordenador','tecnico']);
+      allow update: if sameCompany(resource.data.companyId)
+        && (
+          roleIs(['admin','coordenador'])
+          || (roleIs(['tecnico']) && resource.data.status in ['draft','review'] && request.resource.data.status != 'issued')
+        );
+      allow delete: if sameCompany(resource.data.companyId) && roleIs(['admin','coordenador']);
+    }
+
+    match /auditLogs/{logId} {
+      allow read: if activeUser() && roleIs(['admin','coordenador']);
+      allow create: if activeUser();
+      allow update, delete: if false;
+    }
+
+    match /companySettings/{companyId} {
+      allow read: if sameCompany(companyId);
+      allow write: if sameCompany(companyId) && roleIs(['admin','coordenador']);
+    }
+  }
+}

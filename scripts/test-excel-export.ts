@@ -63,7 +63,7 @@ const calc=calculateLabReport(data);
 const logoPath=path.resolve(process.cwd(),"public/logo-solocontrol.png");
 const logoBase64=fs.existsSync(logoPath)?fs.readFileSync(logoPath).toString("base64"):undefined;
 const wb=await buildLabReportWorkbook(data,calc,{logoBase64});
-const out=process.env.EXCEL_TEST_OUT || path.resolve(process.cwd(),"Solocontrol_Lab_Excel_Teste_V10.xlsx");
+const out=process.env.EXCEL_TEST_OUT || path.resolve(process.cwd(),"Solocontrol_Lab_Excel_Auditoria_V13.xlsx");
 await wb.xlsx.writeFile(out);
 const reloaded=new (await import("exceljs")).default.Workbook();
 await reloaded.xlsx.readFile(out);
@@ -71,5 +71,17 @@ const required=["Relatório Oficial","Granulometria","Índice de Forma","Proprie
 for(const n of required) if(!reloaded.getWorksheet(n)) throw new Error(`Aba ausente: ${n}`);
 const formulaCount=reloaded.worksheets.reduce((total,ws)=>{let count=0;ws.eachRow(row=>row.eachCell(cell=>{const v=cell.value as any;if(v&&typeof v==="object"&&"formula" in v)count++;}));return total+count;},0);
 if(formulaCount<20) throw new Error(`Poucas fórmulas encontradas: ${formulaCount}`);
+const official=reloaded.getWorksheet("Relatório Oficial");
+if(!official) throw new Error("Aba Relatório Oficial ausente");
+let officialFormulaCount=0, officialValueCount=0;
+official.eachRow(row=>row.eachCell(cell=>{
+  const v=cell.value as any;
+  if(v!==null&&v!==undefined&&v!=="") officialValueCount++;
+  if(v&&typeof v==="object"&&"formula" in v) officialFormulaCount++;
+}));
+if(officialFormulaCount<15) throw new Error(`Relatório Oficial não está suficientemente vinculado por fórmulas: ${officialFormulaCount}`);
+if(officialValueCount<80) throw new Error(`Relatório Oficial com poucas células reais: ${officialValueCount}`);
+const officialImages=typeof (official as any).getImages==="function" ? (official as any).getImages().length : 0;
+if(officialImages>2) throw new Error(`Relatório Oficial parece conter páginas como imagem: ${officialImages} imagens`);
 const stat=fs.statSync(out);if(stat.size<25000)throw new Error(`Arquivo pequeno demais: ${stat.size}`);
-console.log(JSON.stringify({out,size:stat.size,worksheets:reloaded.worksheets.length,formulaCount,overallStatus:calc.overallStatus},null,2));
+console.log(JSON.stringify({out,size:stat.size,worksheets:reloaded.worksheets.length,formulaCount,officialFormulaCount,officialValueCount,officialImages,overallStatus:calc.overallStatus},null,2));

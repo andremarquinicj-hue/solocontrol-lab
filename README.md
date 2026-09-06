@@ -135,3 +135,8 @@ O arquivo de referência utilizado nos testes estruturais foi reaberto com suces
 ## V12.1 — correção de build Vercel
 - Corrigido erro TypeScript em `src/lib/excel.ts` na aplicação das cores de status do ExcelJS.
 - `statusFill()` retorna `fgColor` diretamente; todas as referências incorretas a `st.fill` foram substituídas por `fgColor: st.fgColor`.
+
+
+## V13 — Excel editável para auditoria
+
+A aba Relatório Oficial deixou de ser uma imagem. O XLSX agora reproduz o relatório com células editáveis e fórmulas ligadas às abas técnicas, permitindo auditar a memória de cálculo. O gráfico continua incorporado como visual, enquanto todos os seus dados permanecem nas células de Granulometria.

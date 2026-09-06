@@ -1,5 +1,4 @@
 import ExcelJS from "exceljs";
-import html2canvas from "html2canvas";
 import { COMPANY } from "@/config/company";
 import { MASTER_SIEVES, TRACK_BANDS } from "@/lib/granulometry";
 import { TEST_CATALOG } from "@/lib/testCatalog";
@@ -29,8 +28,6 @@ type FormulaRefs = Partial<Record<TestType | "summary", string>>;
 export interface ExcelBuildOptions {
   logoBase64?: string;
   granulometryChartBase64?: string;
-  /** Capturas JPEG das páginas do relatório oficial. Quando presentes, a primeira aba do Excel vira um espelho visual 1:1 do PDF. */
-  officialReportPagesBase64?: string[];
 }
 
 function excelDate(v: string) {
@@ -304,40 +301,203 @@ function officialSectionStatus(ws:ExcelJS.Worksheet,row:number,label:string,ref:
  ws.getCell(row,1).value=label;ws.mergeCells(row,2,row,5);ws.getCell(row,2).value=ref;ws.getCell(row,6).value=result;ws.mergeCells(row,6,row,7);ws.getCell(row,8).value=criterion;ws.mergeCells(row,8,row,9);ws.getCell(row,10).value=status;styleDataArea(ws,row,row,1,10);const st=statusFill(status);ws.getCell(row,10).fill={type:"pattern",pattern:"solid",fgColor: st.fgColor};ws.getCell(row,10).font={bold:true,color:{argb:st.font},size:9};
 }
 
-function addOfficialReportSnapshot(workbook: ExcelJS.Workbook, ws: ExcelJS.Worksheet, pagesBase64: string[]) {
-  // Mantém o mesmo aspecto A4 do PDF: cada página do relatório é capturada do próprio DOM
-  // e inserida como imagem na aba oficial. As abas técnicas continuam contendo as fórmulas reais.
+function addOfficialReportCells(workbook: ExcelJS.Workbook, ws: ExcelJS.Worksheet, data: LabReportData, calc: LabReportCalculation, refs: FormulaRefs, options: ExcelBuildOptions) {
+  // IMPORTANTE: esta aba é um espelho EDITÁVEL do relatório do sistema.
+  // Não há captura de página/print. As tabelas são células e os resultados calculados
+  // são fórmulas vinculadas às abas técnicas, preservando a memória de cálculo para auditoria.
   setupWorksheet(ws, true);
-  ws.views = [{ showGridLines: false, zoomScale: 70 }];
-  ws.columns = Array.from({ length: 10 }, () => ({ width: 10.6 }));
-  const rowsPerPage = 59;
-  const imageWidthPx = 720;
-  const imageHeightPx = Math.round(imageWidthPx * 297 / 210);
-  pagesBase64.forEach((base64, index) => {
-    const startRow = index * rowsPerPage + 1;
-    for (let r = startRow; r < startRow + rowsPerPage; r++) ws.getRow(r).height = 13.1;
-    const id = workbook.addImage({ base64, extension: "jpeg" });
-    ws.addImage(id, { tl: { col: 0, row: startRow - 1 }, ext: { width: imageWidthPx, height: imageHeightPx } });
-    if (index < pagesBase64.length - 1) ws.getRow(startRow + rowsPerPage - 1).addPageBreak();
-  });
-  const lastRow = Math.max(1, pagesBase64.length * rowsPerPage);
-  ws.pageSetup = {
-    paperSize: 9, orientation: "portrait", fitToPage: true, fitToWidth: 1, fitToHeight: 0,
-    margins: { left: 0, right: 0, top: 0, bottom: 0, header: 0, footer: 0 }, horizontalCentered: true, verticalCentered: false,
-    printArea: `A1:J${lastRow}`,
+  ws.views = [{ showGridLines: false, zoomScale: 72 }];
+  ws.columns = [
+    { width: 13 }, { width: 11 }, { width: 14 }, { width: 14 }, { width: 14 },
+    { width: 14 }, { width: 14 }, { width: 14 }, { width: 14 }, { width: 16 },
+  ];
+
+  const selected = new Set(data.selectedTests ?? []);
+  type PageBuilder = (row: number, page: number, total: number) => number;
+  const pages: PageBuilder[] = [];
+
+  const statusCell = (cell: ExcelJS.Cell, status: string) => {
+    const st = statusFill(status);
+    cell.fill = { type: "pattern", pattern: "solid", fgColor: st.fgColor };
+    cell.font = { bold: true, color: { argb: st.font }, size: 9 };
+    cell.alignment = { horizontal: "center", vertical: "middle", wrapText: true };
   };
-}
+  const formulaLink = (sheet: string, address: string, result: FormulaResult) =>
+    formula(`'${sheet.replace(/'/g, "''")}'!${address}`, result);
 
-function addOfficialReportCells(workbook:ExcelJS.Workbook,ws:ExcelJS.Worksheet,data:LabReportData,calc:LabReportCalculation,refs:FormulaRefs,options:ExcelBuildOptions){
- setupWorksheet(ws,true);ws.columns=[{width:16},{width:14},{width:16},{width:16},{width:16},{width:16},{width:16},{width:16},{width:16},{width:18}];
- const selected=new Set(data.selectedTests??[]);
- type PageBuilder=(row:number,page:number,total:number)=>number;const pages:PageBuilder[]=[];
- if(selected.has("granulometria")&&calc.granulometry){pages.push((row,page,total)=>{let r=reportHeader(workbook,ws,data,row,"Composição granulométrica",page,total,options.logoBase64);sectionTitle(ws,r,"1. GRANULOMETRIA • "+TEST_CATALOG.granulometria.reference);r+=2;ws.getRow(r).values=["Peneira","mm","Peso A1 (g)","% ret. A1","Peso A2 (g)","% ret. A2","% passante","Faixa mín.","Faixa máx.","Status"];styleTableHeader(ws.getRow(r),1,10);const gr=calc.granulometry!;gr.rows.forEach((x,i)=>{const rr=r+1+i;const tech=8+i;ws.getCell(rr,1).value=x.label;ws.getCell(rr,2).value=x.mm;ws.getCell(rr,3).value=formula(`'Granulometria'!C${tech}`,x.retained1G);ws.getCell(rr,4).value=formula(`'Granulometria'!D${tech}`,x.retained1Pct);ws.getCell(rr,5).value=formula(`'Granulometria'!E${tech}`,x.retained2G);ws.getCell(rr,6).value=formula(`'Granulometria'!F${tech}`,x.retained2Pct);ws.getCell(rr,7).value=formula(`'Granulometria'!J${tech}`,x.passingPct);ws.getCell(rr,8).value=100-x.maxRetainedAccum;ws.getCell(rr,9).value=100-x.minRetainedAccum;ws.getCell(rr,10).value=formula(`'Granulometria'!M${tech}`,x.conformityStatus);[2,3,5].forEach(c=>setPtNumber(ws.getCell(rr,c),1));[4,6].forEach(c=>setPercent(ws.getCell(rr,c),1));[7,8,9].forEach(c=>setPercent(ws.getCell(rr,c),0));});styleDataArea(ws,r+1,r+gr.rows.length,1,10);r+=gr.rows.length+2;ws.mergeCells(r,1,r,3);ws.getCell(r,1).value=`Massa inicial A1: ${data.sample1MassG?.toLocaleString("pt-BR")??"—"} g`;ws.mergeCells(r,4,r,6);ws.getCell(r,4).value=`Massa inicial A2: ${data.sample2MassG?.toLocaleString("pt-BR")??"—"} g`;ws.mergeCells(r,7,r,10);ws.getCell(r,7).value=`Status: ${gr.overallStatus}`;for(let c=1;c<=10;c++){ws.getCell(r,c).fill={type:"pattern",pattern:"solid",fgColor:{argb:LIGHT_BLUE}};applyBorder([ws.getCell(r,c)]);}if(options.granulometryChartBase64){const id=workbook.addImage({base64:options.granulometryChartBase64,extension:"png"});ws.addImage(id,{tl:{col:1,row:r+1},ext:{width:760,height:350}});r+=22;}else r+=2;return reportFooter(ws,r,data);});}
- if(selected.has("forma")&&calc.shape){const c=calc.shape;pages.push((row,page,total)=>{let r=reportHeader(workbook,ws,data,row,"Índice de forma",page,total,options.logoBase64);sectionTitle(ws,r,"2. ÍNDICE DE FORMA • "+TEST_CATALOG.forma.reference);r+=2;ws.getRow(r).values=["Fragmentos","Média b/a","Média c/b","Forma média","Não cúbicas (%)","Limite (%)","Status"];styleTableHeader(ws.getRow(r),1,7);const rr=r+1;ws.getCell(rr,1).value=c.validCount;ws.getCell(rr,2).value=c.meanBA;ws.getCell(rr,3).value=c.meanCB;ws.getCell(rr,4).value=c.meanClassification;ws.getCell(rr,5).value=c.nonCubicPct;ws.getCell(rr,6).value=c.nonCubicLimitPct;ws.getCell(rr,7).value=c.overallStatus;[2,3].forEach(col=>setPtNumber(ws.getCell(rr,col),2));[5,6].forEach(col=>setPtNumber(ws.getCell(rr,col),1));styleDataArea(ws,rr,rr,1,7);r+=4;ws.mergeCells(r,1,r,10);ws.getCell(r,1).value="As medições individuais a, b e c e as fórmulas b/a e c/b estão na aba 'Índice de Forma'.";ws.getCell(r,1).font={italic:true,size:9,color:{argb:DARK}};ws.getCell(r,1).alignment={horizontal:"center"};return reportFooter(ws,r+3,data);});}
- const simpleSelected=(data.selectedTests??[]).filter(t=>!["granulometria","forma"].includes(t));if(simpleSelected.length){pages.push((row,page,total)=>{let r=reportHeader(workbook,ws,data,row,"Resultados dos ensaios",page,total,options.logoBase64);sectionTitle(ws,r,"RESULTADOS DOS ENSAIOS SELECIONADOS");r+=2;ws.getRow(r).values=["Ensaio","Método / referência","Resultado","","","Critério","","","","Situação"];styleTableHeader(ws.getRow(r),1,10);for(const t of simpleSelected){const summaries=calc.summaries.filter(s=>s.type===t);for(const s of summaries){r++;officialSectionStatus(ws,r,s.label,s.reference,`${s.result}${s.unit!=="—"?` ${s.unit}`:""}`,s.criterion,s.status);}}return reportFooter(ws,r+3,data);});}
- pages.push((row,page,total)=>{let r=reportHeader(workbook,ws,data,row,"Matriz de conformidade e conclusão",page,total,options.logoBase64);sectionTitle(ws,r,"MATRIZ DE CONFORMIDADE • RESULTADOS CONSOLIDADOS");r+=2;ws.getRow(r).values=["Ensaio","Resultado","Unidade","Critério","Método / referência","","","","","Situação"];styleTableHeader(ws.getRow(r),1,10);calc.summaries.forEach(s=>{r++;ws.getCell(r,1).value=s.label;ws.getCell(r,2).value=s.result;ws.getCell(r,3).value=s.unit;ws.getCell(r,4).value=s.criterion;ws.mergeCells(r,5,r,9);ws.getCell(r,5).value=s.reference;ws.getCell(r,10).value=s.status;styleDataArea(ws,r,r,1,10);const st=statusFill(s.status);ws.getCell(r,10).fill={type:"pattern",pattern:"solid",fgColor: st.fgColor};ws.getCell(r,10).font={bold:true,color:{argb:st.font}};});r+=2;ws.mergeCells(r,1,r,4);ws.getCell(r,1).value="CONFORMIDADE GERAL";ws.getCell(r,1).fill={type:"pattern",pattern:"solid",fgColor:{argb:BLUE}};ws.getCell(r,1).font={bold:true,color:{argb:WHITE}};ws.mergeCells(r,5,r,10);ws.getCell(r,5).value=calc.overallStatus;const st=statusFill(calc.overallStatus);ws.getCell(r,5).fill={type:"pattern",pattern:"solid",fgColor: st.fgColor};ws.getCell(r,5).font={bold:true,color:{argb:st.font},size:12};ws.getCell(r,5).alignment={horizontal:"center"};for(let c=1;c<=10;c++)applyBorder([ws.getCell(r,c)]);return reportFooter(ws,r+3,data);});
+  if (selected.has("granulometria") && calc.granulometry) {
+    pages.push((row, page, total) => {
+      let r = reportHeader(workbook, ws, data, row, "Composição granulométrica", page, total, options.logoBase64);
+      sectionTitle(ws, r, `1. GRANULOMETRIA • ${TEST_CATALOG.granulometria.reference}`); r += 2;
+      ws.getRow(r).values = ["Peneira", "mm", "Peso A1 (g)", "% ret. A1", "Peso A2 (g)", "% ret. A2", "% passante", "Faixa mín.", "Faixa máx.", "Status"];
+      styleTableHeader(ws.getRow(r), 1, 10);
+      const startTech = 8;
+      calc.granulometry.rows.forEach((x, i) => {
+        const rr = r + 1 + i, tech = startTech + i;
+        ws.getCell(rr, 1).value = formulaLink("Granulometria", `A${tech}`, x.label);
+        ws.getCell(rr, 2).value = formulaLink("Granulometria", `B${tech}`, x.mm);
+        ws.getCell(rr, 3).value = formulaLink("Granulometria", `C${tech}`, x.retained1G);
+        ws.getCell(rr, 4).value = formulaLink("Granulometria", `D${tech}`, x.retained1Pct);
+        ws.getCell(rr, 5).value = formulaLink("Granulometria", `E${tech}`, x.retained2G);
+        ws.getCell(rr, 6).value = formulaLink("Granulometria", `F${tech}`, x.retained2Pct);
+        ws.getCell(rr, 7).value = formulaLink("Granulometria", `J${tech}`, x.passingPct);
+        ws.getCell(rr, 8).value = formulaLink("Granulometria", `K${tech}`, 100 - x.maxRetainedAccum);
+        ws.getCell(rr, 9).value = formulaLink("Granulometria", `L${tech}`, 100 - x.minRetainedAccum);
+        ws.getCell(rr, 10).value = formulaLink("Granulometria", `M${tech}`, x.conformityStatus);
+        [2,3,5].forEach(c => setPtNumber(ws.getCell(rr,c),1));
+        [4,6].forEach(c => setPercent(ws.getCell(rr,c),1));
+        [7,8,9].forEach(c => setPercent(ws.getCell(rr,c),0));
+        statusCell(ws.getCell(rr,10), x.conformityStatus);
+      });
+      styleDataArea(ws, r + 1, r + calc.granulometry.rows.length, 1, 10);
+      r += calc.granulometry.rows.length + 2;
+      ws.mergeCells(r,1,r,3); ws.getCell(r,1).value = formulaLink("Granulometria","B4",data.sample1MassG);
+      ws.getCell(r,1).numFmt = '"Massa inicial A1: "#,##0.0" g"';
+      ws.mergeCells(r,4,r,6); ws.getCell(r,4).value = formulaLink("Granulometria","D4",data.sample2MassG);
+      ws.getCell(r,4).numFmt = '"Massa inicial A2: "#,##0.0" g"';
+      ws.mergeCells(r,7,r,10); ws.getCell(r,7).value = `Status: ${calc.granulometry.overallStatus}`;
+      for (let c=1;c<=10;c++){ ws.getCell(r,c).fill={type:"pattern",pattern:"solid",fgColor:{argb:LIGHT_BLUE}}; applyBorder([ws.getCell(r,c)]); }
+      if (options.granulometryChartBase64) {
+        const id = workbook.addImage({ base64: options.granulometryChartBase64, extension: "png" });
+        ws.addImage(id, { tl: { col: 1.0, row: r + 1 }, ext: { width: 720, height: 330 } });
+        r += 21;
+      } else r += 2;
+      return reportFooter(ws, r, data);
+    });
+  }
 
- const total=pages.length;let row=1;pages.forEach((build,i)=>{const end=build(row,i+1,total);if(i<pages.length-1){ws.getRow(end).addPageBreak();row=end+2;}else row=end;});ws.pageSetup.printArea=`A1:J${row}`;ws.getColumn(1).width=17;ws.getColumn(2).width=14;ws.getColumn(10).width=18;
+  if (selected.has("forma") && calc.shape) {
+    const c = calc.shape;
+    const validRows = c.rows.filter(x => x.classification !== "PENDENTE" && x.aMm != null && x.bMm != null && x.cMm != null);
+    const fractions = Array.from(new Set(validRows.filter(x => x.fractionMm != null).map(x => x.fractionMm as number))).sort((a,b)=>b-a);
+    pages.push((row,page,total) => {
+      let r = reportHeader(workbook, ws, data, row, "Índice de forma", page, total, options.logoBase64);
+      sectionTitle(ws, r, `2. ÍNDICE DE FORMA • ${TEST_CATALOG.forma.reference}`); r += 2;
+      ws.getRow(r).values = ["Indicador","Resultado","Indicador","Resultado","Indicador","Resultado","Indicador","Resultado","Indicador","Resultado"];
+      styleTableHeader(ws.getRow(r),1,10); r++;
+      const kpis: Array<[string, ExcelJS.CellValue]> = [
+        ["Fragmentos medidos", formula(`COUNT('Índice de Forma'!F5:F${Math.max(5,4+c.rows.length)})`, c.validCount)],
+        ["Média b/a", formulaLink("Índice de Forma","K5",c.meanBA)],
+        ["Média c/b", formulaLink("Índice de Forma","L5",c.meanCB)],
+        ["Forma média", formulaLink("Índice de Forma","K9",c.meanClassification)],
+        ["Não cúbicas (%)", formulaLink("Índice de Forma","K10",c.nonCubicPct)],
+      ];
+      for(let i=0;i<5;i++){ const col=i*2+1; ws.getCell(r,col).value=kpis[i][0]; ws.getCell(r,col+1).value=kpis[i][1]; applyBorder([ws.getCell(r,col),ws.getCell(r,col+1)]); ws.getCell(r,col).fill={type:"pattern",pattern:"solid",fgColor:{argb:LIGHT_BLUE}}; ws.getCell(r,col).font={bold:true,size:8,color:{argb:DARK}}; ws.getCell(r,col+1).font={bold:true,size:9,color:{argb:DARK}}; ws.getCell(r,col+1).alignment={horizontal:"center"}; }
+      setPtNumber(ws.getCell(r,4),2); setPtNumber(ws.getCell(r,6),2); setPtNumber(ws.getCell(r,10),1);
+      r += 2;
+      ws.getRow(r).values=["Fração","Nº fragmentos","Cúbicos","Alongados","Lamelares","Along.-lamelares","% não cúbicas","Média b/a","Média c/b","Status"];
+      styleTableHeader(ws.getRow(r),1,10);
+      const techEnd = Math.max(5, 4 + c.rows.length);
+      fractions.forEach((fr,i)=>{
+        const rr=r+1+i;
+        const rows=validRows.filter(x=>x.fractionMm===fr), cub=rows.filter(x=>x.classification==="CÚBICA").length, al=rows.filter(x=>x.classification==="ALONGADA").length, la=rows.filter(x=>x.classification==="LAMELAR").length, all=rows.filter(x=>x.classification==="ALONGADA LAMELAR").length;
+        ws.getCell(rr,1).value=fr; setPtNumber(ws.getCell(rr,1),1);
+        ws.getCell(rr,2).value=formula(`COUNTIF('Índice de Forma'!$B$5:$B$${techEnd},A${rr})`,rows.length);
+        ws.getCell(rr,3).value=formula(`COUNTIFS('Índice de Forma'!$B$5:$B$${techEnd},A${rr},'Índice de Forma'!$H$5:$H$${techEnd},"CÚBICA")`,cub);
+        ws.getCell(rr,4).value=formula(`COUNTIFS('Índice de Forma'!$B$5:$B$${techEnd},A${rr},'Índice de Forma'!$H$5:$H$${techEnd},"ALONGADA")`,al);
+        ws.getCell(rr,5).value=formula(`COUNTIFS('Índice de Forma'!$B$5:$B$${techEnd},A${rr},'Índice de Forma'!$H$5:$H$${techEnd},"LAMELAR")`,la);
+        ws.getCell(rr,6).value=formula(`COUNTIFS('Índice de Forma'!$B$5:$B$${techEnd},A${rr},'Índice de Forma'!$H$5:$H$${techEnd},"ALONGADA LAMELAR")`,all);
+        ws.getCell(rr,7).value=formula(`IF(B${rr}=0,"",ROUND((B${rr}-C${rr})/B${rr}*100,1))`,rows.length?((rows.length-cub)/rows.length)*100:null); setPtNumber(ws.getCell(rr,7),1);
+        ws.getCell(rr,8).value=formula(`IFERROR(AVERAGEIF('Índice de Forma'!$B$5:$B$${techEnd},A${rr},'Índice de Forma'!$F$5:$F$${techEnd}),"")`, rows.length?rows.reduce((a,x)=>a+(x.ba??0),0)/rows.length:null); setPtNumber(ws.getCell(rr,8),2);
+        ws.getCell(rr,9).value=formula(`IFERROR(AVERAGEIF('Índice de Forma'!$B$5:$B$${techEnd},A${rr},'Índice de Forma'!$G$5:$G$${techEnd}),"")`, rows.length?rows.reduce((a,x)=>a+(x.cb??0),0)/rows.length:null); setPtNumber(ws.getCell(rr,9),2);
+        ws.getCell(rr,10).value=formulaLink("Índice de Forma","K12",c.overallStatus); statusCell(ws.getCell(rr,10),c.overallStatus);
+      });
+      if(fractions.length) styleDataArea(ws,r+1,r+fractions.length,1,10);
+      r += Math.max(1,fractions.length)+2;
+      ws.getRow(r).values=["Estatística","b/a","c/b","","Resultado da amostra","","","","",""]; styleTableHeader(ws.getRow(r),1,10); r++;
+      const statRows:Array<[string,string,string,number|null,number|null]> = [
+        ["Média","K5","L5",c.meanBA,c.meanCB], ["Desvio-padrão","K6","L6",c.stdBA,c.stdCB], ["Coef. variação (%)","K7","L7",c.cvBA,c.cvCB],
+      ];
+      statRows.forEach((x,i)=>{ const rr=r+i; ws.getCell(rr,1).value=x[0]; ws.getCell(rr,2).value=formulaLink("Índice de Forma",x[1],x[3]); ws.getCell(rr,3).value=formulaLink("Índice de Forma",x[2],x[4]); setPtNumber(ws.getCell(rr,2),i===1?3:i===2?1:2); setPtNumber(ws.getCell(rr,3),i===1?3:i===2?1:2); styleDataArea(ws,rr,rr,1,3); });
+      ws.mergeCells(r,5,r+2,10); ws.getCell(r,5).value=`Forma média: ${c.meanClassification}\nPartículas não cúbicas: ${c.nonCubicPct?.toLocaleString("pt-BR") ?? "—"}%\nLimite aplicável: ${c.nonCubicLimitPct}%\nSituação: ${c.overallStatus}`; ws.getCell(r,5).alignment={vertical:"middle",horizontal:"center",wrapText:true}; ws.getCell(r,5).font={bold:true,size:10,color:{argb:DARK}}; for(let rr=r;rr<=r+2;rr++)for(let cc=5;cc<=10;cc++)applyBorder([ws.getCell(rr,cc)]);
+      return reportFooter(ws,r+5,data);
+    });
+
+    const rowsPerPage=26;
+    for(let start=0; start<validRows.length; start+=rowsPerPage){
+      const group=validRows.slice(start,start+rowsPerPage);
+      pages.push((row,page,total)=>{
+        let r=reportHeader(workbook,ws,data,row,"Índice de forma — medições individuais",page,total,options.logoBase64);
+        sectionTitle(ws,r,"2.1 FRAGMENTOS MEDIDOS • DIMENSÕES E CLASSIFICAÇÃO INDIVIDUAL"); r+=2;
+        ws.getRow(r).values=["#","Fração (mm)","a (mm)","b (mm)","c (mm)","b/a","c/b","Classificação","Origem","Memória"];
+        styleTableHeader(ws.getRow(r),1,10);
+        group.forEach((x,i)=>{
+          const rr=r+1+i, tech=5+start+i;
+          for(let col=1;col<=8;col++) ws.getCell(rr,col).value=formulaLink("Índice de Forma",`${String.fromCharCode(64+col)}${tech}`,(col===1?start+i+1:[x.fractionMm,x.aMm,x.bMm,x.cMm,x.ba,x.cb,x.classification][col-2]) as FormulaResult);
+          [2,3,4,5].forEach(col=>setPtNumber(ws.getCell(rr,col),1)); [6,7].forEach(col=>setPtNumber(ws.getCell(rr,col),1));
+          ws.getCell(rr,9).value="Índice de Forma"; ws.getCell(rr,10).value=`F${tech}=D${tech}/C${tech}; G${tech}=E${tech}/D${tech}`;
+        });
+        styleDataArea(ws,r+1,r+group.length,1,10); ws.getColumn(10).width=31;
+        return reportFooter(ws,r+group.length+3,data);
+      });
+    }
+  }
+
+  if (selected.has("massa_especifica") && calc.physicalProperties) {
+    const c=calc.physicalProperties;
+    pages.push((row,page,total)=>{
+      let r=reportHeader(workbook,ws,data,row,"Massa específica, porosidade e absorção",page,total,options.logoBase64);
+      sectionTitle(ws,r,`3. PROPRIEDADES FÍSICAS • ${TEST_CATALOG.massa_especifica.reference}`); r+=2;
+      ws.getRow(r).values=["CP","Massa seca (g)","Massa saturada (g)","Massa submersa (g)","Massa específica (kg/m³)","Porosidade (%)","Absorção (%)","","",""]; styleTableHeader(ws.getRow(r),1,7);
+      const count=Math.min(c.rows.length,14);
+      for(let i=0;i<count;i++){ const rr=r+1+i, tech=5+i; for(let col=1;col<=7;col++)ws.getCell(rr,col).value=formulaLink("Propriedades Físicas",`${String.fromCharCode(64+col)}${tech}`,[i+1,c.rows[i].dryMassG,c.rows[i].saturatedMassG,c.rows[i].submergedMassG,c.rows[i].densityKgM3,c.rows[i].porosityPct,c.rows[i].absorptionPct][col-1] as FormulaResult); [2,3,4].forEach(x=>setPtNumber(ws.getCell(rr,x),2)); setPtNumber(ws.getCell(rr,5),0); [6,7].forEach(x=>setPtNumber(ws.getCell(rr,x),2)); }
+      if(count)styleDataArea(ws,r+1,r+count,1,7); r+=count+2;
+      const kpis=[ ["Massa específica média", "J5", c.meanDensityKgM3, "kg/m³"], ["Porosidade média", "J6", c.meanPorosityPct, "%"], ["Absorção média", "J7", c.meanAbsorptionPct, "%"], ["Status", "J8", c.overallStatus, ""] ] as const;
+      kpis.forEach((x,i)=>{const rr=r+i;ws.mergeCells(rr,1,rr,4);ws.getCell(rr,1).value=x[0];ws.mergeCells(rr,5,rr,10);ws.getCell(rr,5).value=formulaLink("Propriedades Físicas",x[1],x[2] as FormulaResult);if(i===0)setPtNumber(ws.getCell(rr,5),0);if(i===1||i===2)setPtNumber(ws.getCell(rr,5),2);styleDataArea(ws,rr,rr,1,10);if(i===3)statusCell(ws.getCell(rr,5),c.overallStatus);});
+      return reportFooter(ws,r+6,data);
+    });
+  }
+
+  if (selected.has("material_pulverulento") && calc.powder) {
+    const c=calc.powder;
+    pages.push((row,page,total)=>{
+      let r=reportHeader(workbook,ws,data,row,"Material pulverulento",page,total,options.logoBase64);
+      sectionTitle(ws,r,`4. MATERIAL PULVERULENTO • ${TEST_CATALOG.material_pulverulento.reference}`); r+=2;
+      ws.getRow(r).values=["Determinação","Massa seca inicial (g)","Massa após lavagem/seca (g)","Resultado (%)","Verificação","","","","",""];styleTableHeader(ws.getRow(r),1,5);
+      for(let i=0;i<3;i++){const rr=r+1+i,tech=7+i;for(let col=1;col<=5;col++)ws.getCell(rr,col).value=formulaLink("Material Pulverulento",`${String.fromCharCode(64+col)}${tech}`,[`${i+1}ª`,data.powder?.determinations?.[i]?.initialDryG??null,data.powder?.determinations?.[i]?.afterWashDryG??null,c.valuesPct[i],""][col-1] as FormulaResult);[2,3].forEach(x=>setPtNumber(ws.getCell(rr,x),1));setPtNumber(ws.getCell(rr,4),3);}styleDataArea(ws,r+1,r+3,1,5);r+=6;
+      const lines:Array<[string,string,FormulaResult,number?]>=[["Par adotado","B11",c.adoptedPair||c.repeatabilityStatus],["Resultado adotado (%)","B12",c.adoptedResultPct,3],["Resultado reportado (%)","B13",c.reportedResultPct,1],["Status","B14",c.overallStatus]];
+      lines.forEach((x,i)=>{const rr=r+i;ws.mergeCells(rr,1,rr,4);ws.getCell(rr,1).value=x[0];ws.mergeCells(rr,5,rr,10);ws.getCell(rr,5).value=formulaLink("Material Pulverulento",x[1],x[2]);if(x[3]!=null)setPtNumber(ws.getCell(rr,5),x[3]);styleDataArea(ws,rr,rr,1,10);if(i===3)statusCell(ws.getCell(rr,5),c.overallStatus);});
+      return reportFooter(ws,r+6,data);
+    });
+  }
+
+  if (selected.has("torroes_argila") && calc.clay) {
+    const c=calc.clay;
+    pages.push((row,page,total)=>{
+      let r=reportHeader(workbook,ws,data,row,"Torrões de argila e materiais friáveis",page,total,options.logoBase64);
+      sectionTitle(ws,r,`5. TORRÕES DE ARGILA E MATERIAIS FRIÁVEIS • ${TEST_CATALOG.torroes_argila.reference}`);r+=2;
+      ws.getRow(r).values=["Intervalo granulométrico","% retida","Massa mínima (g)","mi (g)","mf (g)","Teor intervalo (%)","Teor usado (%)","Teor parcial (%)","Situação",""];styleTableHeader(ws.getRow(r),1,9);
+      c.rows.forEach((x,i)=>{const rr=r+1+i,tech=5+i;const mapping=["A","B","C","D","E","G","H","I","J"];mapping.forEach((col,j)=>ws.getCell(rr,j+1).value=formulaLink("Torrões de Argila",`${col}${tech}`,[x.label,x.retainedPct,x.minimumMassG,x.initialMassG,x.finalMassG,x.clayPct,x.usedPct,x.partialPct,x.massStatus][j] as FormulaResult));[2,4,5,6,7].forEach(col=>setPtNumber(ws.getCell(rr,col),1));setPtNumber(ws.getCell(rr,3),0);setPtNumber(ws.getCell(rr,8),3);});styleDataArea(ws,r+1,r+c.rows.length,1,9);r+=c.rows.length+2;
+      const totalRow=5+c.rows.length+1;ws.mergeCells(r,1,r,4);ws.getCell(r,1).value="Teor total da amostra (%)";ws.mergeCells(r,5,r,7);ws.getCell(r,5).value=formulaLink("Torrões de Argila",`B${totalRow}`,c.totalPct);setPtNumber(ws.getCell(r,5),3);ws.mergeCells(r,8,r,10);ws.getCell(r,8).value=c.overallStatus;styleDataArea(ws,r,r,1,10);statusCell(ws.getCell(r,8),c.overallStatus);
+      return reportFooter(ws,r+4,data);
+    });
+  }
+
+  const simpleTypes:TestType[]=["massa_unitaria","intemperie","los_angeles","treton","fragmentos_macios","micro_deval","point_load"];
+  const simpleSummaries=calc.summaries.filter(s=>simpleTypes.includes(s.type));
+  if(simpleSummaries.length){
+    pages.push((row,page,total)=>{
+      let r=reportHeader(workbook,ws,data,row,"Demais ensaios executados",page,total,options.logoBase64);
+      sectionTitle(ws,r,"6. DEMAIS ENSAIOS / RESULTADOS");r+=2;
+      ws.getRow(r).values=["Ensaio","Resultado","Unidade","Critério / referência","Método","Situação","Origem","","",""];styleTableHeader(ws.getRow(r),1,7);
+      simpleSummaries.forEach((s,i)=>{const rr=r+1+i;const sheetName=TEST_CATALOG[s.type].shortLabel.slice(0,31);ws.getCell(rr,1).value=s.label;ws.getCell(rr,2).value=formulaLink(sheetName,"B4",s.result);ws.getCell(rr,3).value=formulaLink(sheetName,"B5",s.unit);ws.getCell(rr,4).value=formulaLink(sheetName,"B6",s.criterion);ws.getCell(rr,5).value=formulaLink(sheetName,"B7",s.reference);ws.getCell(rr,6).value=formulaLink(sheetName,"B8",s.status);ws.getCell(rr,7).value=sheetName;statusCell(ws.getCell(rr,6),s.status);});styleDataArea(ws,r+1,r+simpleSummaries.length,1,7);
+      return reportFooter(ws,r+simpleSummaries.length+4,data);
+    });
+  }
+
+  pages.push((row,page,total)=>{
+    let r=reportHeader(workbook,ws,data,row,"Resumo de resultados e conclusão",page,total,options.logoBase64);
+    sectionTitle(ws,r,"RESUMO DOS ENSAIOS EXECUTADOS");r+=2;
+    ws.getRow(r).values=["Característica","Resultado","Unidade","Critério","Referência","","","","","Situação"];styleTableHeader(ws.getRow(r),1,10);
+    calc.summaries.forEach((s,i)=>{const rr=r+1+i,src=5+i;ws.getCell(rr,1).value=formulaLink("Resultados Gerais",`A${src}`,s.label);ws.getCell(rr,2).value=formulaLink("Resultados Gerais",`B${src}`,s.result);ws.getCell(rr,3).value=formulaLink("Resultados Gerais",`C${src}`,s.unit);ws.getCell(rr,4).value=formulaLink("Resultados Gerais",`D${src}`,s.criterion);ws.mergeCells(rr,5,rr,9);ws.getCell(rr,5).value=formulaLink("Resultados Gerais",`E${src}`,s.reference);ws.getCell(rr,10).value=formulaLink("Resultados Gerais",`F${src}`,s.status);statusCell(ws.getCell(rr,10),s.status);styleDataArea(ws,rr,rr,1,10);});
+    r+=calc.summaries.length+2;ws.mergeCells(r,1,r,4);ws.getCell(r,1).value="CONCLUSÃO DOS ENSAIOS SELECIONADOS";ws.getCell(r,1).fill={type:"pattern",pattern:"solid",fgColor:{argb:BLUE}};ws.getCell(r,1).font={bold:true,color:{argb:WHITE}};ws.mergeCells(r,5,r,10);ws.getCell(r,5).value=calc.overallStatus;statusCell(ws.getCell(r,5),calc.overallStatus);for(let c=1;c<=10;c++)applyBorder([ws.getCell(r,c)]);
+    r+=2;ws.mergeCells(r,1,r+2,10);ws.getCell(r,1).value=`Observações: ${data.header.observations||"Sem observações complementares."}\nArquivo Excel de auditoria: relatório em células editáveis + memória de cálculo nas abas técnicas.`;ws.getCell(r,1).alignment={vertical:"middle",wrapText:true};ws.getCell(r,1).font={size:9,color:{argb:DARK}};for(let rr=r;rr<=r+2;rr++)for(let cc=1;cc<=10;cc++)applyBorder([ws.getCell(rr,cc)]);
+    return reportFooter(ws,r+5,data);
+  });
+
+  const total=pages.length;let row=1;
+  pages.forEach((build,i)=>{const end=build(row,i+1,total);if(i<pages.length-1){ws.getRow(end).addPageBreak();row=end+2;}else row=end;});
+  ws.pageSetup.printArea=`A1:J${row}`;
 }
 
 export async function buildLabReportWorkbook(data: LabReportData, calculation: LabReportCalculation, options: ExcelBuildOptions = {}) {
@@ -361,8 +521,7 @@ export async function buildLabReportWorkbook(data: LabReportData, calculation: L
   if (selected.has("massa_unitaria") && calculation.bulkDensity) refs.massa_unitaria = addBulkDensitySheet(workbook, data, calculation.bulkDensity);
   for (const t of ["intemperie","los_angeles","treton","fragmentos_macios","micro_deval","point_load"] as TestType[]) if (selected.has(t)) refs[t] = addNumericSheet(workbook, t, data, calculation);
   refs.summary = addSummarySheet(workbook, data, calculation);
-  if (options.officialReportPagesBase64?.length) addOfficialReportSnapshot(workbook, official, options.officialReportPagesBase64);
-  else addOfficialReportCells(workbook, official, data, calculation, refs, options);
+  addOfficialReportCells(workbook, official, data, calculation, refs, options);
   official.orderNo = 0;
   return workbook;
 }
@@ -402,47 +561,6 @@ async function granulometryChartPng(data: LabReportData, calc: GranulometryCalcu
   return canvas.toDataURL("image/png").split(",")[1];
 }
 
-async function waitForReportAssets(root: HTMLElement) {
-  if (typeof document !== "undefined" && "fonts" in document) {
-    try { await (document as Document & { fonts: FontFaceSet }).fonts.ready; } catch { /* best effort */ }
-  }
-  const images = Array.from(root.querySelectorAll<HTMLImageElement>("img"));
-  await Promise.all(images.map((img) => {
-    if (img.complete && img.naturalWidth > 0) return Promise.resolve();
-    return new Promise<void>((resolve) => {
-      const done = () => resolve();
-      img.addEventListener("load", done, { once: true });
-      img.addEventListener("error", done, { once: true });
-      setTimeout(done, 8000);
-    });
-  }));
-}
-
-async function captureOfficialReportPages() {
-  if (typeof document === "undefined") return [] as string[];
-  const root = document.getElementById("official-report");
-  if (!root) return [] as string[];
-  await waitForReportAssets(root);
-  const pageEls = Array.from(root.querySelectorAll<HTMLElement>(".report-a4"));
-  const targets = pageEls.length ? pageEls : [root];
-  const pages: string[] = [];
-  for (const target of targets) {
-    const canvas = await html2canvas(target, {
-      scale: 1.65,
-      backgroundColor: "#ffffff",
-      useCORS: true,
-      logging: false,
-      imageTimeout: 15000,
-      scrollX: 0,
-      scrollY: -window.scrollY,
-    });
-    // A aba oficial usa a mesma página A4 renderizada no sistema/PDF.
-    // JPEG reduz o tamanho do XLSX sem perder legibilidade para impressão.
-    pages.push(canvas.toDataURL("image/jpeg", 0.94).split(",")[1] || "");
-  }
-  return pages.filter(Boolean);
-}
-
 function requiredExcelSheets(data: LabReportData) {
   const names = ["Relatório Oficial", "Resultados Gerais"];
   const selected = new Set(data.selectedTests ?? []);
@@ -476,12 +594,11 @@ async function validateExcelBuffer(raw: ExcelJS.Buffer, data: LabReportData) {
 }
 
 export async function downloadLabReportExcel(data: LabReportData, calculation: LabReportCalculation) {
-  const [logoBase64, granulometryChartBase64, officialReportPagesBase64] = await Promise.all([
+  const [logoBase64, granulometryChartBase64] = await Promise.all([
     imageUrlToBase64("/logo-solocontrol.png"),
     calculation.granulometry ? granulometryChartPng(data, calculation.granulometry) : Promise.resolve(undefined),
-    captureOfficialReportPages(),
   ]);
-  const workbook = await buildLabReportWorkbook(data, calculation, { logoBase64, granulometryChartBase64, officialReportPagesBase64 });
+  const workbook = await buildLabReportWorkbook(data, calculation, { logoBase64, granulometryChartBase64 });
   const raw = await workbook.xlsx.writeBuffer();
   await validateExcelBuffer(raw, data);
   const bytes = raw instanceof Uint8Array ? raw : new Uint8Array(raw as ArrayBuffer);

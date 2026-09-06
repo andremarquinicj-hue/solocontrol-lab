@@ -248,3 +248,8 @@ A arquitetura foi preparada para adicionar, na sequência:
 10. Assinatura técnica digitalizada e configuração de responsável técnico.
 
 O princípio é manter **um único motor de relatórios**, com cabeçalho e rodapé padronizados, independentemente do ensaio.
+
+## V6 — robustez do build na Vercel
+A configuração Web do Firebase possui fallback no `src/lib/firebase.ts`. As variáveis
+`NEXT_PUBLIC_*` da Vercel continuam tendo prioridade, mas a ausência delas não derruba
+mais o build com `auth/invalid-api-key`.

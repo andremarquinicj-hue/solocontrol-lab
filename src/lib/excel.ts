@@ -202,7 +202,6 @@ function addSummarySheet(workbook: ExcelJS.Workbook, data: LabReportData, calc: 
   ws.mergeCells(total, 2, total, 6); ws.getCell(total, 2).value = calc.overallStatus; const st = statusFill(calc.overallStatus); ws.getCell(total, 2).fill = { type: "pattern", pattern: "solid", fgColor: st.fgColor }; ws.getCell(total, 2).font = { bold: true, color: { argb: st.font }, size: 11 }; ws.getCell(total, 2).alignment = { horizontal: "center" };
   for (let c = 1; c <= 6; c++) applyBorder([ws.getCell(total, c)]);
   ws.autoFilter = { from: "A4", to: `F${4 + calc.summaries.length}` };
-  ws.freezePanes = undefined;
   return `'Resultados Gerais'!$B$${total}`;
 }
 

@@ -140,3 +140,10 @@ O arquivo de referência utilizado nos testes estruturais foi reaberto com suces
 ## V13 — Excel editável para auditoria
 
 A aba Relatório Oficial deixou de ser uma imagem. O XLSX agora reproduz o relatório com células editáveis e fórmulas ligadas às abas técnicas, permitindo auditar a memória de cálculo. O gráfico continua incorporado como visual, enquanto todos os seus dados permanecem nas células de Granulometria.
+
+
+## V13.1 – correção de build
+
+- Corrigida incompatibilidade TypeScript/ExcelJS: removida atribuição inexistente `worksheet.freezePanes`.
+- Congelamento de painéis continua sendo feito pela propriedade suportada `worksheet.views`.
+- Nenhuma regra do Firebase foi alterada.

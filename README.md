@@ -130,3 +130,8 @@ Antes de iniciar o download, a V12:
 - cancela o download e mostra uma mensagem se a validação falhar.
 
 O arquivo de referência utilizado nos testes estruturais foi reaberto com sucesso, com 8 abas, 112 fórmulas e 6 recursos gráficos/imagens, sem erro de integridade ZIP/XLSX.
+
+
+## V12.1 — correção de build Vercel
+- Corrigido erro TypeScript em `src/lib/excel.ts` na aplicação das cores de status do ExcelJS.
+- `statusFill()` retorna `fgColor` diretamente; todas as referências incorretas a `st.fill` foram substituídas por `fgColor: st.fgColor`.

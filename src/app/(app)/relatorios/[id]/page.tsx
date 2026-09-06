@@ -71,7 +71,7 @@ export default function ReportDetailPage(){
         <button className="btn ghost" onClick={saveSnapshot} disabled={busy}><Save size={16}/> Salvar análise</button>
         <button className="btn ghost" onClick={()=>window.print()}><Printer size={16}/> Imprimir</button>
         <button className="btn primary" onClick={downloadPdf} disabled={busy}><Download size={16}/> Baixar PDF</button>
-        {report.status!=="issued" && appUser && ["admin","coordenador"].includes(appUser.role) && <button className="btn orange" onClick={issue} disabled={busy||!preflight.canIssue}><FileCheck2 size={16}/> Emitir e salvar na nuvem</button>}
+        {report.status!=="issued" && appUser && ["admin","coordenador"].includes(appUser.role) && <button className="btn orange" onClick={issue} disabled={busy||!preflight?.canIssue}><FileCheck2 size={16}/> Emitir e salvar na nuvem</button>}
         {report.status==="issued"&&report.pdfUrl&&<a className="btn orange" href={report.pdfUrl} target="_blank" rel="noreferrer"><FileCheck2 size={16}/> PDF oficial</a>}
       </div>
     </div>
@@ -79,7 +79,7 @@ export default function ReportDetailPage(){
     <div className="no-print" style={{display:"grid",gap:8,marginBottom:14}}>
       {preflight.errors.length>0&&<div className="notice warn"><strong>Emissão bloqueada:</strong> {preflight.errors.join(" • ")}</div>}
       {preflight.warnings.length>0&&<div className="notice bad">{preflight.warnings.join(" • ")}</div>}
-      {preflight.canIssue&&<div className="notice ok">Pré-validação concluída. O relatório está apto para emissão, inclusive se o resultado técnico for NÃO CONFORME.</div>}
+      {preflight?.canIssue&&<div className="notice ok">Pré-validação concluída. O relatório está apto para emissão, inclusive se o resultado técnico for NÃO CONFORME.</div>}
     </div>
 
     <div className="report-preview-shell" ref={reportRef}>

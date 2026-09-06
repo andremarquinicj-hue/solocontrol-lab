@@ -509,7 +509,6 @@ export async function buildLabReportWorkbook(data: LabReportData, calculation: L
   workbook.created = new Date();
   workbook.modified = new Date();
   workbook.calcProperties.fullCalcOnLoad = true;
-  workbook.calcProperties.forceFullCalc = true;
   const official = workbook.addWorksheet("Relatório Oficial");
   const refs: FormulaRefs = {};
   const selected = new Set(data.selectedTests ?? []);
@@ -522,7 +521,6 @@ export async function buildLabReportWorkbook(data: LabReportData, calculation: L
   for (const t of ["intemperie","los_angeles","treton","fragmentos_macios","micro_deval","point_load"] as TestType[]) if (selected.has(t)) refs[t] = addNumericSheet(workbook, t, data, calculation);
   refs.summary = addSummarySheet(workbook, data, calculation);
   addOfficialReportCells(workbook, official, data, calculation, refs, options);
-  official.orderNo = 0;
   return workbook;
 }
 

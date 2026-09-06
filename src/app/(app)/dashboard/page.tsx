@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { FilePlus2, FileText, ShieldCheck } from "lucide-react";
 import { subscribeReports } from "@/lib/reports";
+import { TEST_CATALOG } from "@/lib/testCatalog";
 import type { StoredReport } from "@/types";
 
 export default function DashboardPage() {
@@ -33,7 +34,7 @@ export default function DashboardPage() {
       </section>
 
       <div className="section-head">
-        <div><h2>Relatórios recentes</h2><p>Granulometria de lastro ferroviário – NBR 5564:2021.</p></div>
+        <div><h2>Relatórios recentes</h2><p>Ensaios de lastro ferroviário – ficha multien­saios, análise e PDF normativo.</p></div>
         <Link href="/relatorios/novo" className="btn orange"><FilePlus2 size={17}/> Novo ensaio</Link>
       </div>
 
@@ -45,7 +46,7 @@ export default function DashboardPage() {
           <Link key={r.id} href={`/relatorios/${r.id}`} className="report-row">
             <div><strong>{r.header.reportNumber || "Sem número"}</strong><small>Rev. {r.header.revision || "00"}</small></div>
             <div><strong>{r.header.interested || "Interessado não informado"}</strong><small>{r.header.work || "Obra não informada"}</small></div>
-            <div><strong>Padrão {r.band}</strong><small>{r.header.sample || "Sem amostra"}</small></div>
+            <div><strong>{r.selectedTests?.length || 1} ensaio(s)</strong><small>{(r.selectedTests?.slice(0,3).map(t=>TEST_CATALOG[t]?.shortLabel).join(" • ")) || "Granulometria"}{(r.selectedTests?.length||0)>3?" • …":""}</small></div>
             <div>{r.status === "issued" ? <span className="badge ok"><ShieldCheck size={12}/> EMITIDO</span> : <span className="badge info"><FileText size={12}/> {r.status.toUpperCase()}</span>}</div>
             <div style={{color:"var(--muted)",fontSize:12}}>Abrir →</div>
           </Link>

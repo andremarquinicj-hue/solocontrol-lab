@@ -1,255 +1,132 @@
-# Solocontrol Lab
+# Solocontrol Lab V11
 
-Sistema web/PWA para transformar a rotina de planilhas do laboratório Solocontrol em um fluxo profissional de **lançamento → cálculo → validação → relatório PDF → nuvem**.
+## Exportação Excel fiel ao PDF
 
-## Entregue nesta V1
+A V11 altera a exportação Excel para que a primeira aba **Relatório Oficial** seja um espelho visual das mesmas páginas A4 exibidas no sistema e usadas para gerar o PDF. No momento da exportação, o navegador captura cada `.report-a4` e a insere no XLSX, preservando logo, cabeçalho, tabelas, gráfico, rodapé, fotos, assinaturas e paginação.
 
-- Login com Firebase Authentication.
-- Relatórios salvos no Cloud Firestore.
-- PDF oficial salvo no Firebase Storage.
-- Perfis previstos: `admin`, `coordenador`, `tecnico`.
-- Dashboard de relatórios.
-- Novo ensaio de granulometria.
-- Seleção dinâmica **Padrão A / Padrão B**.
-- A tela mostra somente as peneiras do padrão escolhido.
-- Duas determinações (A1/A2).
-- Cálculo automático de % retida, diferença, média, acumulada e passante.
-- Repetibilidade de 4% por peneira.
-- Balanço de massa de 0,3%.
-- Enquadramento automático na faixa NBR 5564:2021.
-- Resultado: CONFORME / NÃO CONFORME / REPETIR ENSAIO / PENDENTE.
-- Gráfico SVG desenhado no padrão visual solicitado pela Ana.
-- Relatório A4 com identidade Solocontrol, cabeçalho, gráfico e rodapé.
-- Pré-validação antes da emissão.
-- Geração de PDF.
-- Upload do PDF oficial para a nuvem.
-- Audit log de criação/alteração/emissão.
+As demais abas continuam técnicas e auditáveis, com os valores e **fórmulas reais** (granulometria, índice de forma, material pulverulento, torrões de argila, propriedades físicas, massa unitária e demais ensaios selecionados). Assim o Excel reúne duas necessidades: fidelidade visual do relatório oficial e rastreabilidade dos cálculos.
 
-Leia também: `docs/REQUISITOS_ANA.md`.
+O gráfico granulométrico também continua presente na aba técnica e aparece exatamente como no relatório oficial.
 
 ---
 
-# 1. Criar o projeto no GitHub
+# Solocontrol Lab V8 — Multien­saios
 
-1. Entre no GitHub e clique em **New repository**.
-2. Nome sugerido: `solocontrol-lab`.
-3. Recomendo deixar **Private**.
-4. Não marque README, .gitignore ou licença, porque o ZIP já contém esses arquivos.
-5. Extraia o ZIP deste projeto no computador.
-6. Abra a pasta no VS Code.
-7. Abra o Terminal do VS Code e execute:
+Sistema web/PWA para a rotina do laboratório Solocontrol: **amostra → seleção dos ensaios → lançamento → cálculo → pré-validação → revisão → relatório PDF multipágina → nuvem**.
 
-```bash
-git init
-git add .
-git commit -m "Base Solocontrol Lab"
-git branch -M main
-git remote add origin https://github.com/SEU-USUARIO/solocontrol-lab.git
-git push -u origin main
-```
+## Principais melhorias da V8
 
----
+- Ficha única da amostra com seleção dinâmica dos ensaios.
+- Ensaios obrigatórios disponíveis: Granulometria, Índice de Forma, Massa específica/Porosidade/Absorção, Intempérie, Massa Unitária, Material Pulverulento, Torrões de Argila e Los Angeles.
+- Ensaios opcionais: Treton, Fragmentos macios/friáveis, Micro-Deval e Point Load.
+- Índice de forma com tela própria de **Medição dos fragmentos (pedras)**: fração, a, b, c, b/a, c/b e classificação automática.
+- A granulometria indica as frações com retenção ≥ 10% para orientar o ensaio de forma.
+- Cálculos automáticos já estruturados para granulometria, forma, propriedades físicas, material pulverulento, torrões e massa unitária.
+- Critérios automáticos por litologia para forma, massa específica, absorção e Los Angeles.
+- Geolocalização pelo celular.
+- Fotos/evidências anexadas à ficha e arquivadas no Firebase Storage.
+- Edição de rascunhos/revisão.
+- Fluxo `draft → review → issued`.
+- Relatório A4 **multipágina**: uma página por módulo relevante, matriz final de resultados e páginas de registro fotográfico quando houver imagens.
+- Cabeçalhos de tabelas do relatório em azul Solocontrol com texto branco para alta legibilidade.
+- Curva granulométrica com escala logarítmica 0,01–100 mm, peneiras no topo, % passante à esquerda e % retida à direita.
+- PDF oficial arquivado no Storage, com histórico no Firestore.
 
-# 2. Criar o Firebase
+> Importante: os módulos de Intempérie, Los Angeles, Treton, Fragmentos macios, Micro-Deval e Point Load estão disponíveis como lançamento estruturado de resultado + análise de critério/referência. Para transformar cada um deles em roteiro completo de laboratório com todas as pesagens/intermediários, deve-se homologar o método com a edição da norma específica usada pela Solocontrol.
 
-## 2.1 Projeto
+## Atualização do projeto existente
 
-1. Acesse o Firebase Console.
-2. **Criar projeto**.
-3. Nome sugerido: `Solocontrol Lab`.
-4. Depois, em **Visão geral do projeto**, clique no ícone `</>` para criar um **Web App**.
-5. Nome do app: `Solocontrol Lab Web`.
-6. Copie os dados do `firebaseConfig`.
+1. Faça backup do repositório atual.
+2. Substitua os arquivos pelos da V8.
+3. Faça commit/push para `main`.
+4. **Atualize as regras do Storage**, pois fotos usam subpastas dentro de `reports/{companyId}/{reportId}/evidencias/`.
+5. Faça novo deploy na Vercel.
 
-## 2.2 Authentication
-
-1. Firebase → **Authentication** → Começar.
-2. **Sign-in method**.
-3. Ative **Email/Password**.
-4. Em **Users**, crie o primeiro usuário da Ana/administrador.
-
-## 2.3 Firestore
-
-1. Firebase → **Firestore Database** → Criar banco de dados.
-2. Escolha a região adequada.
-3. Pode iniciar em modo de produção.
-
-## 2.4 Storage
-
-1. Firebase → **Storage** → Começar.
-2. Use a mesma região quando possível.
-
----
-
-# 3. Configurar as variáveis do Firebase
-
-Na raiz do projeto:
-
-```bash
-copy .env.example .env.local
-```
-
-No PowerShell também pode usar:
-
-```powershell
-Copy-Item .env.example .env.local
-```
-
-Preencha `.env.local`:
-
-```env
-NEXT_PUBLIC_FIREBASE_API_KEY=...
-NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=...
-NEXT_PUBLIC_FIREBASE_PROJECT_ID=...
-NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=...
-NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=...
-NEXT_PUBLIC_FIREBASE_APP_ID=...
-NEXT_PUBLIC_COMPANY_ID=solocontrol
-```
-
-Nunca envie `.env.local` para o GitHub.
-
----
-
-# 4. Criar o primeiro usuário administrador no Firestore
-
-Depois de criar o usuário no Authentication:
-
-1. Copie o **UID** dele.
-2. Firestore → Start collection.
-3. Collection ID: `users`.
-4. Document ID: cole exatamente o UID.
-5. Crie os campos:
-
-```text
-name       string   Ana
-email      string   email-da-ana@...
-role       string   admin
-companyId  string   solocontrol
-active     boolean  true
-```
-
-Para um técnico, use `role = tecnico`.
-Para coordenação, `role = coordenador`.
-
----
-
-# 5. Publicar as regras do Firebase
-
-Instale as dependências do projeto:
+### Publicar regras do Firebase
 
 ```bash
 npm install
-```
-
-Faça login no Firebase CLI:
-
-```bash
 npx firebase-tools login
-```
-
-Associe o projeto:
-
-```bash
 npx firebase-tools use --add
-```
-
-Escolha o projeto `Solocontrol Lab` e dê o alias `default`.
-
-Publique regras e índices:
-
-```bash
 npx firebase-tools deploy --only firestore:rules,firestore:indexes,storage
 ```
 
----
+## Firebase / Vercel
 
-# 6. Testar localmente
+As variáveis `NEXT_PUBLIC_*` continuam suportadas. O projeto também mantém o fallback Web Config do Firebase já utilizado na versão que estava publicada, evitando quebra do build quando a variável não estiver presente.
 
-```bash
-npm run dev
-```
+## Perfis
 
-Abra:
+- `admin`: configurações, usuários, revisão e emissão.
+- `coordenador`: revisão e emissão.
+- `tecnico`: cria e preenche fichas/ensaios; não emite documento oficial.
 
-```text
-http://localhost:3000
-```
+## Fluxo recomendado
 
-Faça login com o usuário criado no Firebase.
+1. Criar ficha.
+2. Preencher identificação e litologia.
+3. Capturar geolocalização e anexar fotos quando necessário.
+4. Selecionar os ensaios.
+5. Executar cada módulo.
+6. Resolver pendências da pré-validação.
+7. Salvar rascunho.
+8. Enviar para revisão.
+9. Coordenador confere o PDF.
+10. Emitir e arquivar a versão oficial.
 
-Teste este fluxo:
+## Referências de projeto usadas nesta etapa
 
-1. Novo ensaio.
-2. Selecione Padrão A.
-3. Confira as peneiras exibidas.
-4. Troque para Padrão B.
-5. Confira que as peneiras mudaram.
-6. Lance A1/A2.
-7. Confira cálculos e gráfico.
-8. Salve.
-9. Abra o relatório.
-10. Confira a pré-validação.
-11. Baixe o PDF.
-12. Quando estiver tudo certo, clique **Emitir e salvar na nuvem**.
-13. Confirme no Firebase Storage que o PDF foi salvo.
+A estrutura da V8 foi organizada com base nos materiais fornecidos para o projeto, especialmente NBR 5564:2021, NBR 17054:2022, NBR 7218:2025 e a planilha Solocontrol desenvolvida/validada na conversa.
 
----
+## V9 — melhorias solicitadas em campo/laboratório (06/09/2026)
 
-# 7. Publicar no Vercel
+- Campos numéricos refeitos para aceitar **vírgula ou ponto decimal** sem apagar a casa decimal durante a digitação.
+- Aceita exemplos como `1874,9`, `1874.9`, `1.874,9` e `1,874.9`.
+- Enter avança para o próximo campo numérico, agilizando o lançamento de várias pesagens.
+- Exibição dos cálculos padronizada em **pt-BR** (vírgula decimal).
+- Índice de Forma ganhou cartões de progresso das frações com retenção relevante e atalhos para preparar lotes de fragmentos.
+- O PDF do Índice de Forma passou a trazer, além do resumo, **as medições individuais de cada fragmento**: fração, a, b, c, b/a, c/b e classificação.
+- O relatório também apresenta média, desvio-padrão e coeficiente de variação de b/a e c/b.
+- As medições individuais são paginadas automaticamente para evitar corte em A4.
 
-1. Acesse a Vercel.
-2. **Add New → Project**.
-3. Importe o repositório `solocontrol-lab` do GitHub.
-4. Framework: o Vercel deve reconhecer **Next.js** automaticamente.
-5. Em **Environment Variables**, crie todas as variáveis do `.env.local`.
-6. Clique em **Deploy**.
+A V9 mantém o mesmo Firebase, Firestore, Storage e projeto Vercel das versões anteriores.
 
-Depois do deploy, copie o domínio, por exemplo:
+## V10 — exportação Excel técnico fiel ao relatório
 
-```text
-https://solocontrol-lab.vercel.app
-```
+- Novo botão **Exportar Excel** na tela do relatório.
+- Geração `.xlsx` no navegador, sem depender de servidor externo.
+- Aba **Relatório Oficial** diagramada com a identidade Solocontrol e preparada para impressão A4.
+- Abas técnicas criadas apenas para os ensaios selecionados/realizados.
+- Fórmulas reais nas células para granulometria, índice de forma e módulos calculados, permitindo auditoria do cálculo no Excel.
+- Cabeçalhos, unidades, número do relatório, revisão, identificação da amostra, litologia e matriz de resultados mantidos no arquivo.
+- Gráfico granulométrico é exportado para o Excel quando o ensaio estiver presente.
+- O arquivo de teste foi reaberto e verificado quanto a estrutura, fórmulas e erros de referência.
 
-## Autorizar o domínio no Firebase
+## V12 — PDF oficial + Excel espelho do sistema
 
-Firebase → Authentication → Settings → Authorized domains.
+A V12 consolida o fluxo definitivo do laboratório:
 
-Adicione o domínio da Vercel se ele ainda não estiver listado.
+1. O técnico preenche **somente o Solocontrol Lab**.
+2. O sistema executa cálculos, critérios e pré-validações.
+3. O mesmo conjunto de dados gera o **PDF oficial**.
+4. O botão **Exportar Excel** gera um `.xlsx` sem novo lançamento de dados.
 
----
+### Como o Excel foi estruturado
 
-# 8. Rotina operacional sugerida
+- **Relatório Oficial:** captura as mesmas páginas A4 renderizadas pelo Solocontrol Lab e usadas como base do PDF. Isso mantém no Excel o mesmo logo, cabeçalho, tabelas, gráfico granulométrico, fotos, paginação, conclusão e rodapé exibidos no sistema.
+- **Abas técnicas:** guardam os dados numéricos e fórmulas reais dos ensaios selecionados, permitindo conferência e auditoria.
+- Somente os módulos executados são incluídos nas abas técnicas.
+- O arquivo é configurado para A4 e a primeira aba permanece na posição inicial.
 
-### Técnico
-`Login → Novo ensaio → cabeçalho → faixa → pesagens A1/A2 → análise automática → salvar para revisão`
+### Proteção contra Excel corrompido
 
-### Coordenação
-`Abrir relatório → conferir dados/cálculos → visualizar A4 → emitir PDF oficial`
+Antes de iniciar o download, a V12:
 
-### Cliente
-Recebe apenas o **PDF oficial padronizado**.
+- termina de carregar fontes e imagens do relatório;
+- monta o XLSX completo;
+- reabre o arquivo em memória com o próprio mecanismo XLSX;
+- verifica se as abas obrigatórias existem;
+- confirma a presença de fórmulas quando há módulos calculados;
+- cancela o download e mostra uma mensagem se a validação falhar.
 
----
-
-# 9. Próximos módulos recomendados
-
-A arquitetura foi preparada para adicionar, na sequência:
-
-1. Material pulverulento — NBR 16973.
-2. Índice de forma — Anexo A da NBR 5564.
-3. Torrões de argila — NBR 7218.
-4. Los Angeles.
-5. Massa específica, porosidade e absorção.
-6. Intempérie.
-7. Massa unitária.
-8. Painel de gestão e indicadores por cliente/obra/material.
-9. Numeração automática e revisão controlada dos relatórios.
-10. Assinatura técnica digitalizada e configuração de responsável técnico.
-
-O princípio é manter **um único motor de relatórios**, com cabeçalho e rodapé padronizados, independentemente do ensaio.
-
-## V6 — robustez do build na Vercel
-A configuração Web do Firebase possui fallback no `src/lib/firebase.ts`. As variáveis
-`NEXT_PUBLIC_*` da Vercel continuam tendo prioridade, mas a ausência delas não derruba
-mais o build com `auth/invalid-api-key`.
+O arquivo de referência utilizado nos testes estruturais foi reaberto com sucesso, com 8 abas, 112 fórmulas e 6 recursos gráficos/imagens, sem erro de integridade ZIP/XLSX.

@@ -14,9 +14,9 @@ import {
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import { COMPANY } from "@/config/company";
 import { db, storage } from "@/lib/firebase";
-import type { GranulometryReportData, StoredReport } from "@/types";
+import type { LabReportData, StoredReport } from "@/types";
 
-export async function createReport(data: GranulometryReportData) {
+export async function createReport(data: LabReportData) {
   const refDoc = await addDoc(collection(db, "reports"), {
     ...data,
     createdAt: serverTimestamp(),
@@ -26,7 +26,7 @@ export async function createReport(data: GranulometryReportData) {
   return refDoc.id;
 }
 
-export async function updateReport(id: string, patch: Partial<GranulometryReportData>, userId: string) {
+export async function updateReport(id: string, patch: Partial<LabReportData>, userId: string) {
   const current = await getReport(id);
   await updateDoc(doc(db, "reports", id), {
     ...patch,
@@ -38,7 +38,7 @@ export async function updateReport(id: string, patch: Partial<GranulometryReport
 export async function getReport(id: string): Promise<StoredReport | null> {
   const snap = await getDoc(doc(db, "reports", id));
   if (!snap.exists()) return null;
-  return { id: snap.id, ...(snap.data() as GranulometryReportData) };
+  return { id: snap.id, ...(snap.data() as LabReportData) };
 }
 
 export function subscribeReports(callback: (items: StoredReport[]) => void) {
@@ -48,7 +48,7 @@ export function subscribeReports(callback: (items: StoredReport[]) => void) {
     orderBy("createdAt", "desc"),
   );
   return onSnapshot(q, (snap) => {
-    callback(snap.docs.map((d) => ({ id: d.id, ...(d.data() as GranulometryReportData) })));
+    callback(snap.docs.map((d) => ({ id: d.id, ...(d.data() as LabReportData) })));
   });
 }
 
@@ -56,6 +56,15 @@ export async function uploadPdf(reportId: string, revision: string, blob: Blob) 
   const storageRef = ref(storage, `reports/${COMPANY.id}/${reportId}/relatorio-rev-${revision || "00"}.pdf`);
   await uploadBytes(storageRef, blob, { contentType: "application/pdf" });
   return getDownloadURL(storageRef);
+}
+
+
+export async function uploadEvidencePhoto(reportId: string, file: File) {
+  const safeName = file.name.replace(/[^a-zA-Z0-9._-]+/g, "-");
+  const storageRef = ref(storage, `reports/${COMPANY.id}/${reportId}/evidencias/${Date.now()}-${safeName}`);
+  await uploadBytes(storageRef, file, { contentType: file.type || "image/jpeg" });
+  const url = await getDownloadURL(storageRef);
+  return { url, name: file.name };
 }
 
 export async function issueReport(reportId: string, pdfUrl: string, userId: string) {

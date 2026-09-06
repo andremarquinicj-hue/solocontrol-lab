@@ -1,0 +1,6 @@
+"use client";
+import type { NumericResultTestData } from "@/types";
+import { DecimalInput } from "@/components/DecimalInput";
+export function NumericTestEditor({title,reference,description,unit="%",criterion,data,onChange,status}:{title:string;reference:string;description:string;unit?:string;criterion:string;data:NumericResultTestData;onChange:(v:NumericResultTestData)=>void;status:string}){
+ return <section className="test-editor"><div className="test-editor-title"><div><span className="step-chip">•</span><h3>{title}</h3></div><small>{reference}</small></div><div className="card"><p className="editor-help">{description}</p><div className="form-grid"><div className="field c4"><label>Resultado ({unit}) *</label><DecimalInput value={data.result} onValueChange={v=>onChange({...data,result:v})}/></div><div className="field c4"><label>Critério / referência</label><input value={criterion} readOnly/></div><div className="field c4"><label>Situação</label><input value={status} readOnly/></div><div className="field c12"><label>Observações do ensaio</label><textarea rows={2} value={data.observations} onChange={e=>onChange({...data,observations:e.target.value})}/></div></div></div></section>;
+}

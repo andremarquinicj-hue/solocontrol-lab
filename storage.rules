@@ -13,7 +13,7 @@ service firebase.storage {
       return signedIn() && userCompany() == companyId;
     }
 
-    match /reports/{companyId}/{reportId}/{fileName} {
+    match /reports/{companyId}/{reportId}/{allPaths=**} {
       allow read, write: if sameCompany(companyId);
     }
 

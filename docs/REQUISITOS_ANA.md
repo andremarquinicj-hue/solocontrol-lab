@@ -71,7 +71,7 @@ O vídeo mostra a seção **A.6 — Relatório de ensaio**. Para o módulo de í
 - referência à norma;
 - observações complementares.
 
-A V1 entregue neste projeto implementa o módulo de **granulometria**. O banco e o motor de relatório foram organizados para receber o módulo de forma sem refazer o sistema.
+A V8 implementa a ficha **multien­saios**, incluindo o módulo de forma com lançamento individual dos fragmentos (pedras), cálculos b/a e c/b e consolidação automática. Os demais ensaios da matriz NBR 5564 também podem ser selecionados pelo técnico na mesma ficha.
 
 ## 5. Rodapé do relatório
 
@@ -93,3 +93,22 @@ O PDF é o registro principal enviado ao cliente. Por isso:
 - o PDF emitido é salvo no Firebase Storage;
 - o documento no Firestore passa para status `issued`;
 - todas as alterações relevantes geram audit log.
+
+
+## 7. Ficha multien­saios — V8
+
+O técnico seleciona quais ensaios serão executados. O sistema exibe somente os módulos marcados e o PDF inclui somente os resultados efetivamente selecionados. A ficha suporta:
+- Granulometria;
+- Índice de forma;
+- Massa específica aparente, porosidade e absorção;
+- Resistência à intempérie;
+- Massa unitária no estado solto;
+- Material pulverulento;
+- Torrões de argila e materiais friáveis;
+- Abrasão Los Angeles;
+- Treton;
+- Fragmentos macios/friáveis;
+- Micro-Deval;
+- Point Load.
+
+Também foram incorporados geolocalização, evidências fotográficas, edição de rascunhos/revisão e PDF multipágina.

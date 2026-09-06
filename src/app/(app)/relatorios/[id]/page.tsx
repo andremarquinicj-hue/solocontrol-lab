@@ -49,7 +49,7 @@ export default function ReportDetailPage(){
   }
 
   async function issue(){
-    if(!auth.currentUser||!preflight.canIssue||!appUser||!["admin","coordenador"].includes(appUser.role)) return;
+    if(!auth.currentUser||!preflight?.canIssue||!appUser||!["admin","coordenador"].includes(appUser.role)) return;
     const el=document.getElementById("official-report");
     if(!el) return;
     const ok=confirm("Emitir este relatório como documento oficial? Após a emissão ele deve ser tratado como registro controlado.");

@@ -147,3 +147,8 @@ A aba Relatório Oficial deixou de ser uma imagem. O XLSX agora reproduz o relat
 - Corrigida incompatibilidade TypeScript/ExcelJS: removida atribuição inexistente `worksheet.freezePanes`.
 - Congelamento de painéis continua sendo feito pela propriedade suportada `worksheet.views`.
 - Nenhuma regra do Firebase foi alterada.
+
+
+## V13.2 – correção de build
+- Corrigido narrowing TypeScript em `calc.granulometry` dentro do gerador do Excel auditável.
+- Nenhuma alteração em Firebase/Storage é necessária.

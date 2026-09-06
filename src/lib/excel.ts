@@ -325,13 +325,14 @@ function addOfficialReportCells(workbook: ExcelJS.Workbook, ws: ExcelJS.Workshee
     formula(`'${sheet.replace(/'/g, "''")}'!${address}`, result);
 
   if (selected.has("granulometria") && calc.granulometry) {
+    const g = calc.granulometry;
     pages.push((row, page, total) => {
       let r = reportHeader(workbook, ws, data, row, "Composição granulométrica", page, total, options.logoBase64);
       sectionTitle(ws, r, `1. GRANULOMETRIA • ${TEST_CATALOG.granulometria.reference}`); r += 2;
       ws.getRow(r).values = ["Peneira", "mm", "Peso A1 (g)", "% ret. A1", "Peso A2 (g)", "% ret. A2", "% passante", "Faixa mín.", "Faixa máx.", "Status"];
       styleTableHeader(ws.getRow(r), 1, 10);
       const startTech = 8;
-      calc.granulometry.rows.forEach((x, i) => {
+      g.rows.forEach((x, i) => {
         const rr = r + 1 + i, tech = startTech + i;
         ws.getCell(rr, 1).value = formulaLink("Granulometria", `A${tech}`, x.label);
         ws.getCell(rr, 2).value = formulaLink("Granulometria", `B${tech}`, x.mm);
@@ -348,13 +349,13 @@ function addOfficialReportCells(workbook: ExcelJS.Workbook, ws: ExcelJS.Workshee
         [7,8,9].forEach(c => setPercent(ws.getCell(rr,c),0));
         statusCell(ws.getCell(rr,10), x.conformityStatus);
       });
-      styleDataArea(ws, r + 1, r + calc.granulometry.rows.length, 1, 10);
-      r += calc.granulometry.rows.length + 2;
+      styleDataArea(ws, r + 1, r + g.rows.length, 1, 10);
+      r += g.rows.length + 2;
       ws.mergeCells(r,1,r,3); ws.getCell(r,1).value = formulaLink("Granulometria","B4",data.sample1MassG);
       ws.getCell(r,1).numFmt = '"Massa inicial A1: "#,##0.0" g"';
       ws.mergeCells(r,4,r,6); ws.getCell(r,4).value = formulaLink("Granulometria","D4",data.sample2MassG);
       ws.getCell(r,4).numFmt = '"Massa inicial A2: "#,##0.0" g"';
-      ws.mergeCells(r,7,r,10); ws.getCell(r,7).value = `Status: ${calc.granulometry.overallStatus}`;
+      ws.mergeCells(r,7,r,10); ws.getCell(r,7).value = `Status: ${g.overallStatus}`;
       for (let c=1;c<=10;c++){ ws.getCell(r,c).fill={type:"pattern",pattern:"solid",fgColor:{argb:LIGHT_BLUE}}; applyBorder([ws.getCell(r,c)]); }
       if (options.granulometryChartBase64) {
         const id = workbook.addImage({ base64: options.granulometryChartBase64, extension: "png" });

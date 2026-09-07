@@ -16,23 +16,45 @@ import { COMPANY } from "@/config/company";
 import { db, storage } from "@/lib/firebase";
 import type { LabReportData, StoredReport } from "@/types";
 
+function sanitizeForFirestore<T>(value: T): T {
+  if (Array.isArray(value)) {
+    return value.map((item) => item === undefined ? null : sanitizeForFirestore(item)) as T;
+  }
+  if (value && typeof value === "object") {
+    const proto = Object.getPrototypeOf(value);
+    if (proto === Object.prototype || proto === null) {
+      const out: Record<string, unknown> = {};
+      for (const [key, item] of Object.entries(value as Record<string, unknown>)) {
+        if (item === undefined) continue;
+        out[key] = sanitizeForFirestore(item);
+      }
+      return out as T;
+    }
+  }
+  return value;
+}
+
 export async function createReport(data: LabReportData) {
+  // O Firestore rejeita qualquer `undefined`, inclusive dentro de objetos
+  // aninhados como calculationSnapshot. Limpamos o payload antes da gravação.
+  const cleanData = sanitizeForFirestore(data);
   const refDoc = await addDoc(collection(db, "reports"), {
-    ...data,
+    ...cleanData,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   });
-  await addAudit(refDoc.id, data.createdBy, "CREATE", null, data);
+  await addAudit(refDoc.id, cleanData.createdBy, "CREATE", null, cleanData);
   return refDoc.id;
 }
 
 export async function updateReport(id: string, patch: Partial<LabReportData>, userId: string) {
   const current = await getReport(id);
+  const cleanPatch = sanitizeForFirestore(patch);
   await updateDoc(doc(db, "reports", id), {
-    ...patch,
+    ...cleanPatch,
     updatedAt: serverTimestamp(),
   });
-  await addAudit(id, userId, "UPDATE", current, patch);
+  await addAudit(id, userId, "UPDATE", current, cleanPatch);
 }
 
 export async function getReport(id: string): Promise<StoredReport | null> {
@@ -78,7 +100,7 @@ export async function issueReport(reportId: string, pdfUrl: string, userId: stri
 }
 
 async function addAudit(reportId: string, userId: string, action: string, before: unknown, after: unknown) {
-  await addDoc(collection(db, "auditLogs"), {
+  await addDoc(collection(db, "auditLogs"), sanitizeForFirestore({
     companyId: COMPANY.id,
     reportId,
     userId,
@@ -86,7 +108,7 @@ async function addAudit(reportId: string, userId: string, action: string, before
     before,
     after,
     createdAt: serverTimestamp(),
-  });
+  }));
 }
 
 export async function seedCompanySettings() {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { LocateFixed, Save, ShieldCheck } from "lucide-react";
 import { auth } from "@/lib/firebase";
@@ -45,6 +45,10 @@ function initialReport():LabReportData{
 export function ReportEditor({initialData,reportId}:{initialData?:StoredReport;reportId?:string}){
   const router=useRouter();
   const [saving,setSaving]=useState(false);
+  const [saveMessage,setSaveMessage]=useState("");
+  const [saveError,setSaveError]=useState("");
+  const [localSavedAt,setLocalSavedAt]=useState("");
+  const [localInitialized,setLocalInitialized]=useState(false);
   const [newPhotoFiles,setNewPhotoFiles]=useState<File[]>([]);
   const [geoBusy,setGeoBusy]=useState(false);
   const base=useMemo(()=>initialData??initialReport(),[initialData]);
@@ -77,6 +81,54 @@ export function ReportEditor({initialData,reportId}:{initialData?:StoredReport;r
     ...(base.issuedAt ? {issuedAt:base.issuedAt} : {}),
   }),[base.status,base.createdBy,base.pdfUrl,base.issuedAt,band,header,sample1MassG,sample2MassG,sieves,bottom1G,bottom2G,selectedTests,shape,physicalProperties,weathering,bulkDensity,powder,clay,losAngeles,treton,softFragments,microDeval,pointLoad,evidencePhotos]);
 
+  const localDraftKey=`solocontrol-lab:draft:${reportId??"novo"}`;
+
+  useEffect(()=>{
+    if(reportId||initialData){setLocalInitialized(true);return;}
+    try{
+      const raw=localStorage.getItem(localDraftKey);
+      if(raw){
+        const saved=JSON.parse(raw) as LabReportData;
+        const hasUsefulData=Boolean(saved?.header?.reportNumber||saved?.shape?.particles?.length||saved?.sieves?.some(r=>r.retained1G!=null||r.retained2G!=null));
+        if(hasUsefulData&&window.confirm("Encontramos um rascunho local não enviado ao banco de dados. Deseja recuperar os dados?")){
+          setHeader(saved.header??defaultHeader);
+          setBand(saved.band??"A");
+          setSelectedTests(saved.selectedTests??["granulometria"]);
+          setSample1MassG(saved.sample1MassG??null);setSample2MassG(saved.sample2MassG??null);
+          setBottom1G(saved.bottom1G??0);setBottom2G(saved.bottom2G??0);
+          setSieves(saved.sieves?.length?saved.sieves:initialSievesForBand(saved.band??"A"));
+          setShape(saved.shape??{method:"paquimetro",particles:[]});
+          setPhysicalProperties(saved.physicalProperties??{specimens:emptyPhysicalSpecimens(10)});
+          setWeathering(saved.weathering??emptyNumeric());setBulkDensity(saved.bulkDensity??initialBulkDensityData());
+          setPowder(saved.powder??initialPowderData());setClay(saved.clay??initialClayData());
+          setLosAngeles(saved.losAngeles??emptyNumeric());setTreton(saved.treton??emptyNumeric());
+          setSoftFragments(saved.softFragments??emptyNumeric());setMicroDeval(saved.microDeval??emptyNumeric());setPointLoad(saved.pointLoad??emptyNumeric());
+          setEvidencePhotos(saved.evidencePhotos??[]);
+          setSaveMessage("Backup local recuperado. Clique em Salvar rascunho para enviar ao banco de dados.");
+        }else if(hasUsefulData){
+          localStorage.removeItem(localDraftKey);
+        }
+      }
+    }catch{
+      localStorage.removeItem(localDraftKey);
+    }finally{
+      setLocalInitialized(true);
+    }
+  },[initialData,localDraftKey,reportId]);
+
+  useEffect(()=>{
+    if(!localInitialized)return;
+    const timer=window.setTimeout(()=>{
+      try{
+        localStorage.setItem(localDraftKey,JSON.stringify(data));
+        setLocalSavedAt(new Date().toLocaleTimeString("pt-BR"));
+      }catch{
+        // O salvamento local é uma camada de segurança; não bloqueia o formulário.
+      }
+    },700);
+    return()=>window.clearTimeout(timer);
+  },[data,localDraftKey,localInitialized]);
+
   const granCalc=useMemo(()=>calculateGranulometry(data),[data]);
   const shapeCalc=useMemo(()=>calculateShape(shape,header.lithology),[shape,header.lithology]);
   const physicalCalc=useMemo(()=>calculatePhysicalProperties(physicalProperties,header.lithology),[physicalProperties,header.lithology]);
@@ -95,7 +147,8 @@ export function ReportEditor({initialData,reportId}:{initialData?:StoredReport;r
     navigator.geolocation.getCurrentPosition(p=>{setHeader(h=>({...h,latitude:p.coords.latitude,longitude:p.coords.longitude,locationCapturedAt:new Date().toISOString()}));setGeoBusy(false);},e=>{alert(`Não foi possível obter a localização: ${e.message}`);setGeoBusy(false);},{enableHighAccuracy:true,timeout:15000});
   }
   async function save(){
-    if(!auth.currentUser)return;setSaving(true);
+    if(!auth.currentUser){setSaveError("Sessão expirada. Entre novamente antes de salvar.");return;}
+    setSaving(true);setSaveMessage("");setSaveError("");
     try{
       const payload:LabReportData={...data,createdBy:data.createdBy||auth.currentUser.uid,calculationSnapshot:labCalc};
       let id:string;
@@ -107,14 +160,23 @@ export function ReportEditor({initialData,reportId}:{initialData?:StoredReport;r
         await updateReport(id,{evidencePhotos:nextPhotos},auth.currentUser.uid);
         setEvidencePhotos(nextPhotos); setNewPhotoFiles([]);
       }
-      router.push(`/relatorios/${id}`);
+      localStorage.removeItem(localDraftKey);
+      const when=new Date().toLocaleTimeString("pt-BR");
+      setSaveMessage(`Rascunho salvo com sucesso às ${when}. Abrindo o relatório...`);
+      window.setTimeout(()=>router.push(`/relatorios/${id}`),350);
+    }catch(error){
+      console.error("Falha ao salvar relatório",error);
+      const message=error instanceof Error?error.message:"Erro desconhecido ao salvar.";
+      setSaveError(`Não foi possível salvar no banco de dados. Seus dados continuam nesta tela e no backup local. ${message}`);
     }finally{setSaving(false);}
   }
 
   if(base.status==="issued") return <main className="page"><div className="notice warn">Relatórios emitidos são registros controlados e não podem ser editados. Gere uma nova revisão a partir do histórico.</div></main>;
 
   return <main className="page">
-    <div className="section-head"><div><h2>{reportId?"Editar ficha de ensaio":"Nova ficha de ensaio"}</h2><p>Cadastre a amostra, selecione os ensaios e deixe o sistema calcular e validar cada módulo.</p></div><button className="btn primary" onClick={save} disabled={saving}><Save size={17}/>{saving?"Salvando...":reportId?"Salvar alterações":"Salvar rascunho"}</button></div>
+    <div className="section-head"><div><h2>{reportId?"Editar ficha de ensaio":"Nova ficha de ensaio"}</h2><p>Cadastre a amostra, selecione os ensaios e deixe o sistema calcular e validar cada módulo.</p><small style={{display:"block",marginTop:4,color:"#58708f"}}>Backup local automático {localSavedAt?`• salvo às ${localSavedAt}`:"• preparando..."}</small></div><button className="btn primary" onClick={save} disabled={saving}><Save size={17}/>{saving?"Salvando...":reportId?"Salvar alterações":"Salvar rascunho"}</button></div>
+    {saveMessage&&<div className="notice ok" style={{marginBottom:12}}><strong>{saveMessage}</strong></div>}
+    {saveError&&<div className="notice bad" style={{marginBottom:12}}><strong>Erro ao salvar.</strong> {saveError}</div>}
 
     <section className="card sample-card"><div className="card-title-row"><div><h3>Identificação da amostra e do relatório</h3><p>Estas informações serão repetidas no cabeçalho do PDF oficial.</p></div><span className={`badge ${labCalc.overallStatus==="CONFORME"?"ok":labCalc.overallStatus==="NÃO CONFORME"?"bad":"warn"}`}><ShieldCheck size={13}/> {labCalc.overallStatus}</span></div>
       <div className="form-grid">

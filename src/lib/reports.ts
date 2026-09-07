@@ -4,7 +4,6 @@ import {
   doc,
   getDoc,
   onSnapshot,
-  orderBy,
   query,
   serverTimestamp,
   setDoc,
@@ -63,15 +62,41 @@ export async function getReport(id: string): Promise<StoredReport | null> {
   return { id: snap.id, ...(snap.data() as LabReportData) };
 }
 
+function createdAtToMillis(value: unknown): number {
+  if (!value) return 0;
+  if (value instanceof Date) return value.getTime();
+  if (typeof value === "number") return value;
+  if (typeof value === "object") {
+    const candidate = value as { toMillis?: () => number; seconds?: number; nanoseconds?: number };
+    if (typeof candidate.toMillis === "function") return candidate.toMillis();
+    if (typeof candidate.seconds === "number") {
+      return candidate.seconds * 1000 + Math.floor((candidate.nanoseconds || 0) / 1_000_000);
+    }
+  }
+  return 0;
+}
+
 export function subscribeReports(callback: (items: StoredReport[]) => void) {
+  // Evita depender de índice composto do Firestore. Filtramos pela empresa
+  // no servidor e ordenamos os poucos relatórios recentes no cliente.
   const q = query(
     collection(db, "reports"),
     where("companyId", "==", COMPANY.id),
-    orderBy("createdAt", "desc"),
   );
-  return onSnapshot(q, (snap) => {
-    callback(snap.docs.map((d) => ({ id: d.id, ...(d.data() as LabReportData) })));
-  });
+
+  return onSnapshot(
+    q,
+    (snap) => {
+      const items = snap.docs
+        .map((d) => ({ id: d.id, ...(d.data() as LabReportData) }))
+        .sort((a, b) => createdAtToMillis(b.createdAt) - createdAtToMillis(a.createdAt));
+      callback(items);
+    },
+    (error) => {
+      console.error("Falha ao carregar relatórios do dashboard:", error);
+      callback([]);
+    },
+  );
 }
 
 export async function uploadPdf(reportId: string, revision: string, blob: Blob) {

@@ -152,3 +152,9 @@ A aba Relatório Oficial deixou de ser uma imagem. O XLSX agora reproduz o relat
 ## V13.2 – correção de build
 - Corrigido narrowing TypeScript em `calc.granulometry` dentro do gerador do Excel auditável.
 - Nenhuma alteração em Firebase/Storage é necessária.
+
+
+## V13.6 — Dashboard sem índice composto
+- Corrige o Dashboard mostrando 0 relatórios quando o Firestore ainda não possui o índice `companyId + createdAt`.
+- A consulta continua filtrada por `companyId`, mas a ordenação por `createdAt` passa a ser feita no cliente.
+- O relatório salvo não é apagado: a correção apenas restaura a listagem no Dashboard.

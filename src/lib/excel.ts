@@ -1,6 +1,6 @@
 import ExcelJS from "exceljs";
 import { COMPANY } from "@/config/company";
-import { MASTER_SIEVES, TRACK_BANDS } from "@/lib/granulometry";
+import { MASTER_SIEVES, TRACK_BANDS, granulometryXAxis } from "@/lib/granulometry";
 import { TEST_CATALOG } from "@/lib/testCatalog";
 import type {
   GranulometryCalculation,
@@ -544,17 +544,16 @@ async function granulometryChartPng(data: LabReportData, calc: GranulometryCalcu
   if (typeof document === "undefined") return undefined;
   const canvas = document.createElement("canvas");
   const W=1200,H=560;canvas.width=W;canvas.height=H;const ctx=canvas.getContext("2d");if(!ctx)return undefined;
-  const M={left:90,right:82,top:65,bottom:75};const xMin=.01,xMax=100;
+  const M={left:90,right:82,top:65,bottom:75};const {xMin,xMax,xGrid,bottomLabels}=granulometryXAxis(data.band);
   const xp=(x:number)=>M.left+((Math.log10(x)-Math.log10(xMin))/(Math.log10(xMax)-Math.log10(xMin)))*(W-M.left-M.right);
   const yp=(y:number)=>M.top+((100-y)/100)*(H-M.top-M.bottom);
   ctx.fillStyle="#fff";ctx.fillRect(0,0,W,H);ctx.strokeStyle="#333";ctx.lineWidth=1;ctx.strokeRect(M.left,M.top,W-M.left-M.right,H-M.top-M.bottom);
   ctx.font="14px Arial";ctx.fillStyle="#263746";ctx.textAlign="right";ctx.textBaseline="middle";
   for(let y=0;y<=100;y+=5){ctx.beginPath();ctx.moveTo(M.left,yp(y));ctx.lineTo(W-M.right,yp(y));ctx.strokeStyle=y%10===0?"#666":"#d0d0d0";ctx.lineWidth=y%10===0?1:.5;ctx.stroke();if(y%10===0){ctx.fillStyle="#263746";ctx.fillText(String(y),M.left-12,yp(y));ctx.textAlign="left";ctx.fillText(String(100-y),W-M.right+12,yp(y));ctx.textAlign="right";}}
-  for(const decade of [.01,.1,1,10])for(let m=1;m<=9;m++){const x=decade*m;ctx.beginPath();ctx.moveTo(xp(x),M.top);ctx.lineTo(xp(x),H-M.bottom);ctx.strokeStyle=m===1?"#666":"#c5c5c5";ctx.lineWidth=m===1?1:.5;ctx.stroke();}
-  ctx.beginPath();ctx.moveTo(xp(100),M.top);ctx.lineTo(xp(100),H-M.bottom);ctx.strokeStyle="#666";ctx.stroke();
-  ctx.textAlign="center";ctx.textBaseline="alphabetic";ctx.font="bold 14px Arial";ctx.fillStyle="#263746";for(const s of MASTER_SIEVES){ctx.setLineDash([5,4]);ctx.beginPath();ctx.moveTo(xp(s.mm),M.top);ctx.lineTo(xp(s.mm),H-M.bottom);ctx.strokeStyle="#333";ctx.lineWidth=1;ctx.stroke();ctx.setLineDash([]);ctx.fillText(s.label,xp(s.mm),M.top-18);}ctx.font="13px Arial";for(const x of [.01,.1,1,10,100])ctx.fillText(String(x).replace(".",","),xp(x),H-M.bottom+28);
+  for(const x of xGrid){const major=bottomLabels.some(label=>Math.abs(label-x)<1e-9);ctx.beginPath();ctx.moveTo(xp(x),M.top);ctx.lineTo(xp(x),H-M.bottom);ctx.strokeStyle=major?"#666":"#c5c5c5";ctx.lineWidth=major?1:.5;ctx.stroke();}
+  ctx.textAlign="center";ctx.textBaseline="alphabetic";ctx.font="bold 14px Arial";ctx.fillStyle="#263746";for(const s of MASTER_SIEVES.filter(s=>s.mm>=xMin&&s.mm<=xMax)){ctx.setLineDash([5,4]);ctx.beginPath();ctx.moveTo(xp(s.mm),M.top);ctx.lineTo(xp(s.mm),H-M.bottom);ctx.strokeStyle="#333";ctx.lineWidth=1;ctx.stroke();ctx.setLineDash([]);ctx.fillText(s.label,xp(s.mm),M.top-18);}ctx.font="13px Arial";for(const x of bottomLabels)ctx.fillText(String(x).replace(".",","),xp(x),H-M.bottom+28);
   ctx.font="bold 16px Arial";ctx.fillText("Diâmetro das partículas (mm)",(M.left+W-M.right)/2,H-18);ctx.save();ctx.translate(28,(M.top+H-M.bottom)/2);ctx.rotate(-Math.PI/2);ctx.fillText("Porcentagem que passa (%)",0,0);ctx.restore();ctx.save();ctx.translate(W-22,(M.top+H-M.bottom)/2);ctx.rotate(Math.PI/2);ctx.fillText("Porcentagem retida (%)",0,0);ctx.restore();ctx.textAlign="left";ctx.fillText("Peneiras",M.left,M.top-42);
-  const defs=TRACK_BANDS[data.band].sieves;const lower=defs.map(r=>({x:r.mm,y:100-r.maxRetainedAccum})).sort((a,b)=>a.x-b.x);const upper=defs.map(r=>({x:r.mm,y:100-r.minRetainedAccum})).sort((a,b)=>a.x-b.x);const obtained=calc.rows.filter(r=>r.passingPct!==null).map(r=>({x:r.mm,y:r.passingPct as number})).sort((a,b)=>a.x-b.x);
+  const defs=TRACK_BANDS[data.band].sieves;const lower=defs.filter(r=>r.mm>=xMin&&r.mm<=xMax).map(r=>({x:r.mm,y:100-r.maxRetainedAccum})).sort((a,b)=>a.x-b.x);const upper=defs.filter(r=>r.mm>=xMin&&r.mm<=xMax).map(r=>({x:r.mm,y:100-r.minRetainedAccum})).sort((a,b)=>a.x-b.x);const obtained=calc.rows.filter(r=>r.passingPct!==null&&r.mm>=xMin&&r.mm<=xMax).map(r=>({x:r.mm,y:r.passingPct as number})).sort((a,b)=>a.x-b.x);
   const line=(pts:Array<{x:number;y:number}>,color:string,width:number)=>{if(!pts.length)return;ctx.beginPath();ctx.moveTo(xp(pts[0].x),yp(pts[0].y));for(const p of pts.slice(1))ctx.lineTo(xp(p.x),yp(p.y));ctx.strokeStyle=color;ctx.lineWidth=width;ctx.stroke();};line(lower,"#e04747",2.2);line(upper,"#e04747",2.2);line(obtained,"#123f80",3);ctx.fillStyle="#123f80";for(const p of obtained){ctx.beginPath();ctx.arc(xp(p.x),yp(p.y),5,0,Math.PI*2);ctx.fill();}
   return canvas.toDataURL("image/png").split(",")[1];
 }

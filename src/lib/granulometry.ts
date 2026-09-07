@@ -40,6 +40,28 @@ export const TRACK_BANDS: Record<TrackBand, { label: string; sieves: SieveDefini
   },
 };
 
+export function granulometryXAxis(band: TrackBand) {
+  const sieves = TRACK_BANDS[band].sieves;
+  const minSieve = Math.min(...sieves.map((s) => s.mm));
+  const maxSieve = Math.max(...sieves.map((s) => s.mm));
+  const xMin = 10 ** Math.floor(Math.log10(minSieve));
+  const xMax = 10 ** Math.ceil(Math.log10(maxSieve));
+
+  const bottomLabels: number[] = [];
+  for (let value = xMin; value <= xMax * (1 + 1e-9); value *= 10) bottomLabels.push(value);
+
+  const xGrid: number[] = [];
+  for (let decade = xMin; decade < xMax; decade *= 10) {
+    for (let multiplier = 1; multiplier <= 9; multiplier += 1) {
+      const value = decade * multiplier;
+      if (value >= xMin && value <= xMax) xGrid.push(value);
+    }
+  }
+  if (!xGrid.some((value) => Math.abs(value - xMax) < 1e-9)) xGrid.push(xMax);
+
+  return { xMin, xMax, bottomLabels, xGrid };
+}
+
 export function initialSievesForBand(band: TrackBand, previous: SieveInput[] = []): SieveInput[] {
   const previousByMm = new Map(previous.map((x) => [x.mm, x]));
   return TRACK_BANDS[band].sieves.map((s) => ({
